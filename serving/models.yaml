@@ -1,0 +1,186 @@
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  annotations:
+    enable-auth: 'false'
+    enable-route: 'false'
+    maxLoadingConcurrency: '2'
+    opendatahub.io/template-display-name: Triton runtime 23.01 - added on 20230815
+    opendatahub.io/template-name: tritonserver-23.01-py3-20230815
+    openshift.io/display-name: Custom Model Server
+  name: custom-model-server
+  labels:
+    name: custom-model-server
+    opendatahub.io/dashboard: 'true'
+spec:
+  supportedModelFormats:
+    - autoSelect: true
+      name: keras
+      version: '2'
+    - autoSelect: true
+      name: onnx
+      version: '1'
+    - autoSelect: true
+      name: pytorch
+      version: '1'
+    - autoSelect: true
+      name: tensorflow
+      version: '1'
+    - autoSelect: true
+      name: python
+      version: '1'
+    - autoSelect: true
+      name: tensorrt
+      version: '7'
+    - autoSelect: true
+      name: bls
+      version: '1'
+    - autoSelect: true
+      name: ensemble
+      version: '1'
+    - autoSelect: true
+      name: fil
+      version: '1'
+  builtInAdapter:
+    memBufferBytes: 134217728
+    modelLoadingTimeoutMillis: 90000
+    runtimeManagementPort: 8001
+    serverType: triton
+  multiModel: true
+  containers:
+    - args:
+        - '-c'
+        - >-
+          mkdir -p /models/_triton_models; chmod 777 /models/_triton_models;
+          exec tritonserver "--model-repository=/models/_triton_models"
+          "--model-control-mode=explicit" "--strict-model-config=false"
+          "--strict-readiness=false" "--allow-http=true"
+          "--allow-sagemaker=false"
+      command:
+        - /bin/sh
+      image: 'nvcr.io/nvidia/tritonserver:23.01-py3'
+      livenessProbe:
+        exec:
+          command:
+            - curl
+            - '--fail'
+            - '--silent'
+            - '--show-error'
+            - '--max-time'
+            - '9'
+            - 'http://localhost:8000/v2/health/live'
+        initialDelaySeconds: 5
+        periodSeconds: 30
+        timeoutSeconds: 10
+      name: triton
+      resources:
+        limits:
+          cpu: '4'
+          memory: 16Gi
+          nvidia.com/gpu: 1
+        requests:
+          cpu: '1'
+          memory: 8Gi
+          nvidia.com/gpu: 1
+      volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+  protocolVersions:
+    - grpc-v2
+  grpcEndpoint: 'port:8085'
+  volumes:
+    - emptyDir:
+        medium: Memory
+        sizeLimit: 2048Mi
+      name: dshm
+  replicas: 1
+  grpcDataEndpoint: 'port:8001'
+
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    openshift.io/display-name: text_encoder
+    serving.kserve.io/deploymentMode: ModelMesh
+  name: textencoder
+  labels:
+    name: textencoder
+    opendatahub.io/dashboard: 'true'
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: onnx
+        version: '1'
+      runtime: custom-model-server
+      storage:
+        key: aws-connection-my-storage
+        path: text-to-image/notebook-output/onnx-redhat-dog/text_encoder
+
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    openshift.io/display-name: unet
+    serving.kserve.io/deploymentMode: ModelMesh
+  name: unet
+  labels:
+    name: unet
+    opendatahub.io/dashboard: 'true'
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: onnx
+        version: '1'
+      runtime: custom-model-server
+      storage:
+        key: aws-connection-my-storage
+        path: text-to-image/notebook-output/onnx-redhat-dog/unet
+
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    openshift.io/display-name: vae_decoder
+    serving.kserve.io/deploymentMode: ModelMesh
+  name: vaedecoder
+  labels:
+    name: vaedecoder
+    opendatahub.io/dashboard: 'true'
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: onnx
+        version: '1'
+      runtime: custom-model-server
+      storage:
+        key: aws-connection-my-storage
+        path: text-to-image/notebook-output/onnx-redhat-dog/vae_decoder
+
+---
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  annotations:
+    openshift.io/display-name: vae_encoder
+    serving.kserve.io/deploymentMode: ModelMesh
+  name: vaeencoder
+  labels:
+    name: vaeencoder
+    opendatahub.io/dashboard: 'true'
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: onnx
+        version: '1'
+      runtime: custom-model-server
+      storage:
+        key: aws-connection-my-storage
+        path: text-to-image/notebook-output/onnx-redhat-dog/vae_encoder
